@@ -7,8 +7,11 @@ authors = ["David Aronchick <aronchick@gmail.com>"]
 [tool.poetry.dependencies]
 python = "^3.9"
 psycopg2-binary = "^2.9.3"
+python-dotenv = "^0.19.2"
+urllib3 = "^1.26.8"
 
 [tool.poetry.dev-dependencies]
+black = {version = "^21.12b0", allow-prereleases = true}
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

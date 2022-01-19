@@ -17,7 +17,7 @@ Resources:
       Runtime: python3.9
       Environment: # More info about Env Vars: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#environment-object
         Variables:
-          DATABASE_URL: # Empty will pull from current env
+          DATABASE_HOST: # Empty will pull from current env
           DATABASE_USER: xxxx
           DATABASE_PASSWORD: xxxx
           DATABASE_NAME: xxxx
