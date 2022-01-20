@@ -1,0 +1,1 @@
+{"errorMessage": "Error occurred during execution: 'cid'", "errorType": "Exception", "requestId": "5732b8b2-8b5b-47ae-948c-52eb35fb0db9", "stackTrace": ["  File \"/var/task/estuary_prober/app.py\", line 314, in lambda_handler\n    raise Exception(\"Error occurred during execution: %s\" % e)  # notify aws of failure\n"]}

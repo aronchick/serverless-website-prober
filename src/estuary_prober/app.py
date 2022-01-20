@@ -5,6 +5,7 @@ from typing import Tuple
 from unicodedata import name
 import json
 import urllib3
+from socket import timeout
 from http import HTTPStatus
 from psycopg2 import connect
 from dotenv import load_dotenv
@@ -28,18 +29,6 @@ DATABASE_USER = os.environ["DATABASE_USER"]
 DATABASE_PASSWORD = os.environ["DATABASE_PASSWORD"]
 DATABASE_NAME = os.environ["DATABASE_NAME"]
 ESTUARY_TOKEN = os.environ["ESTUARY_TOKEN"]
-
-QUERY = """
- SELECT (db_bench_results.result ->> 'BenchStart'::text)::timestamp with time zone AS date,
-    (db_bench_results.result -> 'FetchStats'::text) ->> 'StatusCode'::text AS status,
-    (((db_bench_results.result -> 'FetchStats'::text) ->> 'TimeToFirstByte'::text)::bigint) / 1000000 AS time_to_first_byte,
-    (db_bench_results.result -> 'FetchStats'::text) ->> 'RequestError'::text AS req_err,
-    (db_bench_results.result -> 'FetchStats'::text) ->> 'GatewayHost'::text AS gway_host,
-    (((db_bench_results.result -> 'IpfsCheck'::text) ->> 'CheckTook'::text)::bigint) / 1000000 AS check_time
-   FROM db_bench_results;
-"""
-
-FULL_QUERY = """ SELECT * FROM db_bench_results;"""
 
 NULL_STR = "NULL_STRING"
 
@@ -78,7 +67,7 @@ class DataAvailableOverBitswap:
 
 
 @dataclass
-class IpfsStats:
+class IpfsCheck:
     CheckTook: datetime.timedelta = -1
     CheckRequestError: str = ""
     ConnectionError: str = ""
@@ -107,14 +96,14 @@ class BenchResult:
     AddFileErrorBody: str = ""
 
     FetchStats: FetchStats = FetchStats()
-    IpfsStats: IpfsStats = IpfsStats()
+    IpfsCheck: IpfsCheck = IpfsCheck()
 
 
 def getFile() -> tuple[str, bytes]:
     return ("goodfile-%s" % secrets.token_urlsafe(4), secrets.token_bytes(1024 * 1024))
 
 
-def submitFile(fileName, fileData, host, ESTUARY_TOKEN) -> tuple[int, str]:
+def submitFile(fileName: str, fileData: list, host: str, ESTUARY_TOKEN: str, timeout: int) -> tuple[int, str]:
     API_ENDPOINT = "https://%s/content/add" % host
 
     req_headers = {"Authorization": "Bearer %s" % ESTUARY_TOKEN}
@@ -124,7 +113,11 @@ def submitFile(fileName, fileData, host, ESTUARY_TOKEN) -> tuple[int, str]:
     fields = {
         "data": (fileName, fileData),
     }
-    r = http.request("POST", API_ENDPOINT, headers=req_headers, fields=fields)
+    try:
+        r = http.request("POST", API_ENDPOINT, headers=req_headers, fields=fields, timeout=timeout)
+    except (urllib3.exceptions.HTTPError, urllib3.exceptions.TimeoutError) as error:
+        logging.error("Failed to post file because %s\nURL: %s", error, API_ENDPOINT)
+        return 408, {}
 
     resp_body = r.data.decode("utf-8")
     resp_dict = json.loads(r.data.decode("utf-8"))
@@ -132,26 +125,33 @@ def submitFile(fileName, fileData, host, ESTUARY_TOKEN) -> tuple[int, str]:
     return (r.status, resp_dict)
 
 
-def ipfsCheck(cid: str, addr: str) -> IpfsStats:
-    ipfsStats = IpfsStats()
+def ipfsChecker(cid: str, addr: str, timeout: int) -> IpfsCheck:
+    ipfsCheck = IpfsCheck()
     startTime = time.time_ns()
 
     http = urllib3.PoolManager()
+    url = f"https://ipfs-check-backend.ipfs.io/?cid={cid}&multiaddr={addr}"
 
-    r = http.request("GET", f"https://ipfs-check-backend.ipfs.io/?cid={cid}&multiaddr={addr}")
+    try:
+        r = http.request("GET", url, timeout=timeout)
+    except (urllib3.exceptions.HTTPError, urllib3.exceptions.TimeoutError) as error:
+        logging.error("Failed to get IPFS check %s\nURL: %s", error, url)
+        ipfsCheck.CheckRequestError = f"Ipfs Connection failed. Error: {error}"
+        return ipfsCheck
+
     resp_body = r.data.decode("utf-8")
     resp_dict = json.loads(r.data.decode("utf-8"))
 
-    ipfsStats.CheckTook = time.time_ns() - startTime
+    ipfsCheck.CheckTook = time.time_ns() - startTime
     if r.status != 200:
-        ipfsStats.CheckRequestError = resp_dict["ConnectionError"]
-        return ipfsStats
+        ipfsCheck.CheckRequestError = resp_dict["ConnectionError"]
+        return ipfsCheck
 
-    ipfsStats.CidInDHT = resp_dict["CidInDHT"]
-    ipfsStats.PeerFoundInDHT = resp_dict["PeerFoundInDHT"]
-    ipfsStats.DataAvailableOverBitswap = resp_dict["DataAvailableOverBitswap"]
+    ipfsCheck.CidInDHT = resp_dict["CidInDHT"]
+    ipfsCheck.PeerFoundInDHT = resp_dict["PeerFoundInDHT"]
+    ipfsCheck.DataAvailableOverBitswap = resp_dict["DataAvailableOverBitswap"]
 
-    return ipfsStats
+    return ipfsCheck
 
 
 def benchFetch(cid: str) -> FetchStats:
@@ -187,70 +187,9 @@ def benchFetch(cid: str) -> FetchStats:
     return fetchStats
 
 
-true = True
-
-foo = {
-    "Runner": "why@sirius",
-    "FileCID": "bafkreihualqw7j36nhdoszujzvmm2zrdpwsbfdgynjjjnbzvfoe27fj4qq",
-    "IpfsCheck": {
-        "CidInDHT": true,
-        "CheckTook": 1761233397,
-        "PeerFoundInDHT": {"/ip4/127.0.0.1/tcp/6745": 10, "/ip4/147.75.86.255/tcp/6745": 10},
-        "ConnectionError": "",
-        "CheckRequestError": "",
-        "DataAvailableOverBitswap": {"Error": "", "Found": true, "Responded": true},
-    },
-    "BenchStart": "2021-08-25T15:17:09.01191537-07:00",
-    "FetchStats": {
-        "GatewayURL": "https://dweb.link/ipfs/bafkreihualqw7j36nhdoszujzvmm2zrdpwsbfdgynjjjnbzvfoe27fj4qq",
-        "StatusCode": 200,
-        "GatewayHost": "gateway-bank3-sjc1",
-        "RequestError": "",
-        "RequestStart": "2021-08-25T15:17:17.063176299-07:00",
-        "ResponseTime": 45170029474,
-        "TotalElapsed": 45494443056,
-        "TimeToFirstByte": 45170425558,
-        "TotalTransferTime": 324017498,
-    },
-    "AddFileTime": 8051232024,
-    "AddFileError": "",
-    "AddFileRespTime": 8051161791,
-}
-
-bar = {
-    "Debugging": true,
-    "Runner": "",
-    "BenchStart": "2022-01-19T00:40:07.282594",
-    "FileCID": "bafkreigqhfmg66yyqnxxuqpkxutjxl4tu5jcygyrtpie7lzpzozusbcft4",
-    "AddFileRespTime": 700768593,
-    "AddFileTime": 700764653,
-    "AddFileErrorCode": 200,
-    "AddFileErrorBody": "",
-    "FetchStats": {
-        "RequestStart": "2022-01-19T00:40:08.798816",
-        "GatewayURL": "https://dweb.link/ipfs/bafkreigqhfmg66yyqnxxuqpkxutjxl4tu5jcygyrtpie7lzpzozusbcft4",
-        "GatewayHost": "ipfs-bank3-dc13",
-        "StatusCode": 200,
-        "RequestError": "",
-        "ResponseTime": 785736352,
-        "TimeToFirstByte": 785744102,
-        "TotalTransferTime": 1258520484,
-        "TotalElapsed": -1642552807540300382,
-    },
-    "IpfsStats": {
-        "CheckTook": 815210666,
-        "CheckRequestError": "",
-        "ConnectionError": "",
-        "PeerFoundInDHT": {"/ip4/3.134.223.177/tcp/6745": 10},
-        "CidInDHT": true,
-        "DataAvailableOverBitswap": {"Duration": 46855490, "Found": true, "Responded": true, "Error": ""},
-    },
-}
-
-
 def lambda_handler(event: dict, context):
     benchResult = BenchResult()
-    benchResult.Debugging = true
+    benchResult.Debugging = True
     try:
         conn = connect(
             user=DATABASE_USER,
@@ -267,12 +206,13 @@ def lambda_handler(event: dict, context):
 
         host = event.get("host", "api.estuary.tech")
         runner = event.get("runner", "")
+        timeout = event.get("timeout", 10)
 
         fileName, fileData = getFile()
 
         benchResult.BenchStart = datetime.datetime.now()
         startInNanoSeconds = time.time_ns()
-        responseCode, submitFileResult = submitFile(fileName, fileData, host, ESTUARY_TOKEN)
+        responseCode, submitFileResult = submitFile(fileName, fileData, host, ESTUARY_TOKEN, timeout)
         benchResult.AddFileRespTime = time.time_ns() - startInNanoSeconds
 
         # Not clear why we need the below - go takes a long to unmarshal json?
@@ -291,7 +231,7 @@ def lambda_handler(event: dict, context):
             benchResult.AddFileErrorBody = json.dumps(submitFileResult)
 
         if len(AddFileResponse.Providers) == 0:
-            benchResult.IpfsStats.CheckRequestError = "No providers resulted from check"
+            benchResult.IpfsCheck.CheckRequestError = "No providers resulted from check"
 
         else:
             addr = AddFileResponse.Providers[0]
@@ -301,7 +241,7 @@ def lambda_handler(event: dict, context):
                     addr = potentialProvider
                     break
 
-            benchResult.IpfsStats = ipfsCheck(AddFileResponse.Cid, addr)
+            benchResult.IpfsCheck = ipfsChecker(AddFileResponse.Cid, addr, timeout)
 
         benchResult.FetchStats = benchFetch(AddFileResponse.Cid)
 
@@ -326,5 +266,5 @@ def lambda_handler(event: dict, context):
 
 
 if __name__ == "__main__":
-    event = {"host": "shuttle-4.estuary.tech", "runner": "aronchick@localdebugging"}
+    event = {"host": "shuttle-4.estuary.tech", "runner": "aronchick@localdebugging", "timeout": 10}
     lambda_handler(event, {})

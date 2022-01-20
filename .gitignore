@@ -131,3 +131,7 @@ dmypy.json
 template.yaml
 
 .vscode
+.aws-sam/*
+tf/build
+tf/package
+.terraform
