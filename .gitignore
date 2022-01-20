@@ -135,3 +135,5 @@ template.yaml
 tf/build
 tf/package
 .terraform
+tf/terraform.tfstate
+tf/terraform.tfstate.backup

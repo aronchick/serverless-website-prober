@@ -154,7 +154,7 @@ def ipfsChecker(cid: str, addr: str, timeout: int) -> IpfsCheck:
     return ipfsCheck
 
 
-def benchFetch(cid: str) -> FetchStats:
+def benchFetch(cid: str, timeout: int) -> FetchStats:
     fetchStats = FetchStats()
     fetchStats.GatewayURL = f"https://dweb.link/ipfs/{cid}"
 
@@ -162,7 +162,14 @@ def benchFetch(cid: str) -> FetchStats:
 
     fetchStats.RequestStart = datetime.datetime.now()
     startTimeInNS = time.time_ns()
-    r = http.request("GET", fetchStats.GatewayURL, preload_content=False)
+    try:
+        r = http.request("GET", fetchStats.GatewayURL, preload_content=False, timeout=timeout)
+    except (urllib3.exceptions.HTTPError, urllib3.exceptions.TimeoutError, urllib3.exceptions.MaxRetryError, urllib3.exceptions.ReadTimeoutError) as error:
+        logging.error("Failed to get file %s\nURL: %s", error, fetchStats.GatewayURL)
+        fetchStats.StatusCode = 408
+        fetchStats.RequestError = str(error)
+        return fetchStats
+
     fetchStats.StatusCode = r.status
 
     if r.status != 200:
@@ -243,7 +250,7 @@ def lambda_handler(event: dict, context):
 
             benchResult.IpfsCheck = ipfsChecker(AddFileResponse.Cid, addr, timeout)
 
-        benchResult.FetchStats = benchFetch(AddFileResponse.Cid)
+        benchResult.FetchStats = benchFetch(AddFileResponse.Cid, timeout)
 
         # # do something with the data
         # for record in records:
