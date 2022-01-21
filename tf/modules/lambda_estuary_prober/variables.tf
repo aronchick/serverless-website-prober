@@ -22,3 +22,8 @@ variable "ESTUARY_TOKEN" {
   description = "Estuary token."
   type        = string
 }
+
+variable "region" {
+  description = "Name of the region being deployed to"
+  type  = string
+}

@@ -18,15 +18,31 @@ terraform {
 }
 
 provider "aws" {
-  region = var.aws_region
+  region = local.region_string
+}
+
+provider "aws" {
+  alias = "secret_provider"
+  region = "eu-west-1"
+}
+
+locals {
+  region_string = terraform.workspace
 }
 
 module "secret_manager" {
   source  = "./modules/secret_manager"
+ 
+  providers = {
+    aws = aws.secret_provider
+  }
+
 }
 
 module "lambda_estuary_prober" {
   source  = "./modules/lambda_estuary_prober"
+
+  region=local.region_string
 
   DATABASE_HOST=module.secret_manager.estuary_prober_secrets_dict.DATABASE_HOST
   DATABASE_USER=module.secret_manager.estuary_prober_secrets_dict.DATABASE_USER
@@ -38,8 +54,10 @@ module "lambda_estuary_prober" {
 module "cloudwatch_scheduled_trigger" {
   source  = "./modules/cloudwatch_scheduled_trigger"
 
+  region=local.region_string
+
   estuary_url = "shuttle-4.estuary.tech" 
-  unique_runner_id = "lambda@cloudwatchdebugging"
+  unique_runner_id = "${local.region_string}"
 
   estuary_prober_arn = module.lambda_estuary_prober.estuary_prober_arn
   estuary_prober_function_name = module.lambda_estuary_prober.estuary_prober_function_name

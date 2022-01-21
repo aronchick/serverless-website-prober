@@ -1,6 +1,6 @@
 resource "random_pet" "lambda_bucket_name" {
-  prefix = "pl-benchmarking-functions"
-  length = 4
+  prefix = "${var.region}-pl-benchmarking-functions"
+  length = 2
 }
 
 resource "aws_s3_bucket" "lambda_bucket" {
@@ -28,7 +28,7 @@ resource "aws_s3_bucket_object" "estuary_prober" {
 }
 
 resource "aws_lambda_function" "estuary_prober" {
-  function_name = "EstuaryProber"
+  function_name = "EstuaryProber-${var.region}"
 
   s3_bucket = aws_s3_bucket.lambda_bucket.id
   s3_key    = aws_s3_bucket_object.estuary_prober.key
@@ -54,7 +54,7 @@ resource "aws_lambda_function" "estuary_prober" {
 
 
 resource "aws_iam_role" "lambda_exec" {
-  name = "estuaryprober_iam_role"
+  name = "estuaryprober_iam_role_${var.region}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

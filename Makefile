@@ -13,9 +13,8 @@ zip:
 	./zip.bash $(SERVICE)
 
 apply: build
-	./update_env_variables.sh
 	cd tf && \
-	terraform apply
+	terraform apply -auto-approve 
 
 update:
 	aws lambda update-function-code --s3-bucket s3://$(BUCKETNAME) --s3-key $(SERVICE).zip

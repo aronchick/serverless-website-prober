@@ -24,7 +24,6 @@ JSON
 }
 
 resource "aws_lambda_permission" "allow_cloudwatch_to_call_estuary_prober" {
-    statement_id = "AllowExecutionFromCloudWatch"
     action = "lambda:InvokeFunction"
     function_name = "${var.estuary_prober_function_name}"
     principal = "events.amazonaws.com"

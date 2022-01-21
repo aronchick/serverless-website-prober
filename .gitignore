@@ -137,3 +137,5 @@ tf/package
 .terraform
 tf/terraform.tfstate
 tf/terraform.tfstate.backup
+*.tfstate
+*.tfstate.backup

@@ -18,10 +18,8 @@ variable "estuary_prober_function_name" {
   type        = string
 }
 
-variable "aws_region" {
-  description = "AWS region for all resources."
-
+variable "region" {
+  description = "Name of the region being deployed to."
   type    = string
-  default = "us-east-1"
 }
 
