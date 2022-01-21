@@ -22,4 +22,3 @@ variable "region" {
   description = "Name of the region being deployed to."
   type    = string
 }
-

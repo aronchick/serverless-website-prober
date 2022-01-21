@@ -17,6 +17,10 @@ terraform {
   required_version = "~> 1.0"
 }
 
+locals {
+  shuttles = toset( ["shuttle-4.estuary.tech", "shuttle-5.estuary.tech"] )
+}
+
 provider "aws" {
   region = local.region_string
 }
@@ -56,7 +60,9 @@ module "cloudwatch_scheduled_trigger" {
 
   region=local.region_string
 
-  estuary_url = "shuttle-4.estuary.tech" 
+  for_each = local.shuttles
+  estuary_url=each.key
+
   unique_runner_id = "${local.region_string}"
 
   estuary_prober_arn = module.lambda_estuary_prober.estuary_prober_arn

@@ -24,6 +24,6 @@ variable "ESTUARY_TOKEN" {
 }
 
 variable "region" {
-  description = "Name of the region being deployed to"
-  type  = string
+  description = "Region of caller."
+  type = string
 }

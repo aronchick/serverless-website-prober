@@ -1,3 +1,4 @@
+from curses.ascii import NUL
 from importlib.metadata import files
 import logging
 import os
@@ -94,6 +95,9 @@ class BenchResult:
     AddFileTime: datetime.timedelta = -1
     AddFileErrorCode: int = 500
     AddFileErrorBody: str = ""
+
+    Shuttle: str = NULL_STR
+    Region: str = NULL_STR
 
     FetchStats: FetchStats = FetchStats()
     IpfsCheck: IpfsCheck = IpfsCheck()
@@ -214,6 +218,7 @@ def lambda_handler(event: dict, context):
         host = event.get("host", "api.estuary.tech")
         runner = event.get("runner", "")
         timeout = event.get("timeout", 10)
+        region = event.get("region", "")
 
         fileName, fileData = getFile()
 
@@ -233,6 +238,8 @@ def lambda_handler(event: dict, context):
         benchResult.AddFileRespTime = time.time_ns() - startInNanoSeconds
         benchResult.Runner = runner
         benchResult.AddFileErrorCode = responseCode
+        benchResult.Region = region
+        benchResult.Shuttle = host
 
         if responseCode != 200:
             benchResult.AddFileErrorBody = json.dumps(submitFileResult)
@@ -273,5 +280,5 @@ def lambda_handler(event: dict, context):
 
 
 if __name__ == "__main__":
-    event = {"host": "shuttle-4.estuary.tech", "runner": "aronchick@localdebugging", "timeout": 10}
+    event = {"host": "shuttle-4.estuary.tech", "runner": "aronchick@localdebugging", "timeout": 10, "region": "ap-south-1"}
     lambda_handler(event, {})
