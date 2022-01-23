@@ -23,6 +23,50 @@ logger.setLevel(logging.INFO)
 
 load_dotenv()  # take environment variables from .env.
 
+# Open telemetry/honeycomb block
+import os
+from opentelemetry import trace
+from opentelemetry.instrumentation.urllib3 import URLLib3Instrumentor
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import (
+    SimpleSpanProcessor,
+    BatchSpanProcessor,
+    ConsoleSpanExporter,
+)
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+    OTLPSpanExporter,
+)
+from opentelemetry.context.context import Context
+import typing
+from opentelemetry.propagators import textmap
+from opentelemetry.trace.propagation.tracecontext import (
+    TraceContextTextMapPropagator,
+)
+from opentelemetry.propagate import set_global_textmap
+
+from grpc import ssl_channel_credentials
+from dotenv import load_dotenv
+
+load_dotenv()  # take environment variables from .env. (automatic on glitch; this is needed locally)
+
+# Set up tracing
+resource = Resource(attributes={"service_name": os.getenv("SERVICE_NAME", "estuary-prober")})
+trace.set_tracer_provider(TracerProvider(resource=resource))
+
+apikey = os.environ.get("HONEYCOMB_API_KEY")
+dataset = os.getenv("HONEYCOMB_DATASET")
+print("Sending traces to Honeycomb with apikey <" + apikey + "> to dataset " + dataset)
+
+# Send the traces to Honeycomb
+hnyExporter = OTLPSpanExporter(
+    endpoint="api.honeycomb.io:443", insecure=False, credentials=ssl_channel_credentials(), headers=(("x-honeycomb-team", apikey), ("x-honeycomb-dataset", dataset))
+)
+trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(hnyExporter))
+trace.get_tracer_provider().add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
+
+# To see spans in the log, uncomment this:
+
 CONNECTION_TIMEOUT_IN_SECONDS = 10
 
 DATABASE_HOST = os.environ["DATABASE_HOST"]
@@ -95,6 +139,7 @@ class BenchResult:
     AddFileTime: datetime.timedelta = -1
     AddFileErrorCode: int = 500
     AddFileErrorBody: str = ""
+    LoggingErrorBlob: str = ""
 
     Shuttle: str = NULL_STR
     Region: str = NULL_STR
@@ -121,7 +166,7 @@ def submitFile(fileName: str, fileData: list, host: str, ESTUARY_TOKEN: str, tim
         r = http.request("POST", API_ENDPOINT, headers=req_headers, fields=fields, timeout=timeout)
     except (urllib3.exceptions.HTTPError, urllib3.exceptions.TimeoutError) as error:
         logging.error("Failed to post file because %s\nURL: %s", error, API_ENDPOINT)
-        return 408, {}
+        return 408, {"Error": f"Failed to post file because {error}\nURL: {API_ENDPOINT}"}
 
     resp_body = r.data.decode("utf-8")
     resp_dict = json.loads(r.data.decode("utf-8"))
@@ -198,6 +243,9 @@ def benchFetch(cid: str, timeout: int) -> FetchStats:
     return fetchStats
 
 
+URLLib3Instrumentor().instrument(tracer_provider=trace.get_tracer_provider())
+
+
 def lambda_handler(event: dict, context):
     benchResult = BenchResult()
     benchResult.Debugging = True
@@ -230,12 +278,17 @@ def lambda_handler(event: dict, context):
         # Not clear why we need the below - go takes a long to unmarshal json?
         benchResult.AddFileTime = time.time_ns() - startInNanoSeconds
 
-        AddFileResponse.Cid = submitFileResult["cid"]
-        AddFileResponse.EstuaryId = submitFileResult["estuaryId"]
-        AddFileResponse.Providers = submitFileResult["providers"]
+        if "cid" in submitFileResult:
+            AddFileResponse.Cid = submitFileResult["cid"]
+            AddFileResponse.EstuaryId = submitFileResult["estuaryId"]
+            AddFileResponse.Providers = submitFileResult["providers"]
+        else:
+            AddFileResponse.Cid = NULL_STR
+            AddFileResponse.EstuaryId = NULL_STR
+            AddFileResponse.Providers = NULL_STR
+            benchResult.LoggingErrorBlob = json.dumps(submitFileResult)
 
         benchResult.FileCID = AddFileResponse.Cid
-        benchResult.AddFileRespTime = time.time_ns() - startInNanoSeconds
         benchResult.Runner = runner
         benchResult.AddFileErrorCode = responseCode
         benchResult.Region = region
@@ -280,5 +333,10 @@ def lambda_handler(event: dict, context):
 
 
 if __name__ == "__main__":
-    event = {"host": "shuttle-4.estuary.tech", "runner": "aronchick@localdebugging", "timeout": 10, "region": "ap-south-1"}
-    lambda_handler(event, {})
+    for i in range(3):
+        event = {"host": "shuttle-4.estuary.tech", "runner": "aronchick@localdebugging", "timeout": 10, "region": "ap-south-1"}
+        lambda_handler(event, {})
+
+# {
+#     "host": "shuttle-4.estuary.tech", "runner": "lambda@consoledebugging", "timeout": 10, "region": "us-west-1"
+# }

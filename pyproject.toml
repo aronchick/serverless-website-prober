@@ -9,6 +9,13 @@ python = "^3.9"
 psycopg2-binary = "^2.9.3"
 python-dotenv = "^0.19.2"
 urllib3 = "^1.26.8"
+opentelemetry-api = "^1.8.0"
+opentelemetry-sdk = "^1.8.0"
+opentelemetry-exporter-otlp-proto-grpc = "^1.8.0"
+opentelemetry-instrumentation = "^0.27b0"
+opentelemetry-instrumentation-requests = "^0.27b0"
+requests = "^2.27.1"
+opentelemetry-instrumentation-urllib3 = "^0.27b0"
 
 [tool.poetry.dev-dependencies]
 black = {version = "^21.12b0", allow-prereleases = true}

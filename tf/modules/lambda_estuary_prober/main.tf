@@ -14,7 +14,7 @@ data "archive_file" "estuaryproberzip" {
   type = "zip"
 
   source_dir  = "${path.cwd}/build/EstuaryProber"
-  output_path = "${path.cwd}/package/estuaryprober.zip"
+  output_path = "${path.cwd}/package/EstuaryProber.zip"
 }
 
 
@@ -48,6 +48,8 @@ resource "aws_lambda_function" "estuary_prober" {
       DATABASE_PASSWORD=var.DATABASE_PASSWORD
       DATABASE_NAME=var.DATABASE_NAME
       ESTUARY_TOKEN=var.ESTUARY_TOKEN
+      HONEYCOMB_API_KEY=var.HONEYCOMB_API_KEY
+      HONEYCOMB_DATASET=var.HONEYCOMB_DATASET
     }
   }
 }

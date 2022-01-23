@@ -53,6 +53,8 @@ module "lambda_estuary_prober" {
   DATABASE_PASSWORD=module.secret_manager.estuary_prober_secrets_dict.DATABASE_PASSWORD
   DATABASE_NAME=module.secret_manager.estuary_prober_secrets_dict.DATABASE_NAME
   ESTUARY_TOKEN=module.secret_manager.estuary_prober_secrets_dict.ESTUARY_TOKEN
+  HONEYCOMB_API_KEY=module.secret_manager.estuary_prober_secrets_dict.HONEYCOMB_API_KEY
+  HONEYCOMB_DATASET=module.secret_manager.estuary_prober_secrets_dict.HONEYCOMB_DATASET
 }
 
 module "cloudwatch_scheduled_trigger" {

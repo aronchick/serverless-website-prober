@@ -27,3 +27,13 @@ variable "region" {
   description = "Region of caller."
   type = string
 }
+
+variable "HONEYCOMB_API_KEY"{
+  description = "HONEYCOMB_API_KEY"
+  type=string
+}
+
+variable "HONEYCOMB_DATASET"{
+  description = "HONEYCOMB_DATASET"
+  type=string
+}
