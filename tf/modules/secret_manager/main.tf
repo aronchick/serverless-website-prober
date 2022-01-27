@@ -9,6 +9,7 @@ terraform {
   required_version = "~> 1.0"
 }
 
-data "aws_secretsmanager_secret_version" "estuary_prober_secrets_tf" {
+data "aws_secretsmanager_secret_version" "prober_secrets_tf" {
+    // Legacy name - also, this is in eu-west-1. Probably should duplicate.
     secret_id = "EstuaryProberSecrets"
 }

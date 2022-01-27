@@ -1,5 +1,5 @@
-SERVICE=EstuaryProber
-BUCKETNAME=protocol-labs-lambda-benchmarking-functions
+SERVICE=lambdaprober
+BUCKETNAME=pl-lambda-probers
 
 build:
 	poetry export -f requirements.txt --without-hashes -o requirements.txt

@@ -19,6 +19,9 @@ terraform {
 
 locals {
   shuttles = toset( ["shuttle-4.estuary.tech", "shuttle-5.estuary.tech"] )
+
+  # QmducxoYHKULWXeq5wtKoeMzie2QggYphNCVwuFuou9eWE == NY Open Dataset
+  cids = toset(["QmducxoYHKULWXeq5wtKoeMzie2QggYphNCVwuFuou9eWE"])
 }
 
 provider "aws" {
@@ -32,6 +35,7 @@ provider "aws" {
 
 locals {
   region_string = terraform.workspace
+  prober_function_name = "estuary_gateway_prober-${local.region_string}"
 }
 
 module "secret_manager" {
@@ -42,35 +46,66 @@ module "secret_manager" {
   }
 
 }
+resource "aws_iam_role" "lambda_exec" {
+  name = "estuaryprober_iam_role_${local.region_string}"
 
-module "lambda_estuary_prober" {
-  source  = "./modules/lambda_estuary_prober"
-
-  region=local.region_string
-
-  DATABASE_HOST=module.secret_manager.estuary_prober_secrets_dict.DATABASE_HOST
-  DATABASE_USER=module.secret_manager.estuary_prober_secrets_dict.DATABASE_USER
-  DATABASE_PASSWORD=module.secret_manager.estuary_prober_secrets_dict.DATABASE_PASSWORD
-  DATABASE_NAME=module.secret_manager.estuary_prober_secrets_dict.DATABASE_NAME
-  ESTUARY_TOKEN=module.secret_manager.estuary_prober_secrets_dict.ESTUARY_TOKEN
-  HONEYCOMB_API_KEY=module.secret_manager.estuary_prober_secrets_dict.HONEYCOMB_API_KEY
-  HONEYCOMB_DATASET=module.secret_manager.estuary_prober_secrets_dict.HONEYCOMB_DATASET
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Sid    = ""
+      Principal = {
+        Service = "lambda.amazonaws.com"
+      }
+      }
+    ]
+  })
 }
 
-module "cloudwatch_scheduled_trigger" {
-  source  = "./modules/cloudwatch_scheduled_trigger"
+resource "aws_iam_role_policy_attachment" "lambda_policy" {
+  role       = aws_iam_role.lambda_exec.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+module "lambda_prober" {
+  source  = "./modules/lambda_prober"
 
   region=local.region_string
+  handler_function="estuary_prober.app.lambda_handler"
+  prober_function_name="${local.prober_function_name}"
+  role_arn = aws_iam_role.lambda_exec.arn
+
+  DATABASE_HOST=module.secret_manager.prober_secrets_dict.DATABASE_HOST
+  DATABASE_USER=module.secret_manager.prober_secrets_dict.DATABASE_USER
+  DATABASE_PASSWORD=module.secret_manager.prober_secrets_dict.DATABASE_PASSWORD
+  DATABASE_NAME=module.secret_manager.prober_secrets_dict.DATABASE_NAME
+  ESTUARY_TOKEN=module.secret_manager.prober_secrets_dict.ESTUARY_TOKEN
+  HONEYCOMB_API_KEY=module.secret_manager.prober_secrets_dict.HONEYCOMB_API_KEY
+
+}
+
+module "scheduled_prober_events" {
+  source  = "./modules/scheduled_prober_events"
 
   for_each = local.shuttles
-  estuary_url=each.key
 
-  unique_runner_id = "${local.region_string}"
+  region_string = local.region_string
+  handler_function = "estuary_prober.app.lambda_handler"
+  prober_function_name = module.lambda_prober.prober_function_name
+  prober_arn = module.lambda_prober.prober_arn
 
-  estuary_prober_arn = module.lambda_estuary_prober.estuary_prober_arn
-  estuary_prober_function_name = module.lambda_estuary_prober.estuary_prober_function_name
+  cloud_event_name = "${local.prober_function_name}-${each.key}"
+
+  event = tomap({
+    "host" = "${each.key}",
+    "region" = "${local.region_string}"
+    "runner" = "lambda@${local.prober_function_name}"
+    "timeout" = 60
+  })
 
   depends_on = [
-    module.lambda_estuary_prober
+    module.secret_manager,
+    resource.aws_iam_role_policy_attachment.lambda_policy
   ]
 }

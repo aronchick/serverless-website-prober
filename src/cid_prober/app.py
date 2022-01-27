@@ -8,11 +8,10 @@ import json
 import urllib3
 from socket import timeout
 from http import HTTPStatus
-from psycopg2 import connect
 from dotenv import load_dotenv
 from dataclasses import dataclass, field
 import dataclasses
-
+from psycopg2 import connect
 import datetime
 import time
 
@@ -50,11 +49,8 @@ from dotenv import load_dotenv
 
 load_dotenv()  # take environment variables from .env. (automatic on glitch; this is needed locally)
 
-HONEYCOMB_DATASET = "estuary-prober-dev"
-SERVICE_NAME = "estuary-prober-dev"
-
-# Set up tracing
-resource = Resource(attributes={"service_name": SERVICE_NAME})
+HONEYCOMB_DATASET = "cid-prober-dev"
+SERVICE_NAME = "cid-prober-dev"
 
 # Set up tracing
 resource = Resource(attributes={"service_name": SERVICE_NAME})
@@ -104,41 +100,12 @@ class FetchStats:
     StatusCode: int = 0
     RequestError: str = ""
 
-    ResponseTime: datetime.timedelta = -1
-    TimeToFirstByte: datetime.timedelta = -1
-    TotalTransferTime: datetime.timedelta = -1
-    TotalElapsed: datetime.timedelta = -1
+    ResponseTime: datetime.timedelta = datetime.MAXYEAR - datetime.MINYEAR
+    TimeToFirstByte: datetime.timedelta = datetime.MAXYEAR - datetime.MINYEAR
+    TotalTransferTime: datetime.timedelta = datetime.MAXYEAR - datetime.MINYEAR
+    TotalElapsed: datetime.timedelta = datetime.MAXYEAR - datetime.MINYEAR
 
     LoggingErrorBlob: str = ""
-
-
-@dataclass
-class DataAvailableOverBitswap:
-    Found: bool = False
-    Responded: bool = False
-    Error: str = False
-
-    LoggingErrorBlob: str = ""
-
-
-@dataclass
-class IpfsCheck:
-    CheckTook: datetime.timedelta = -1
-    CheckRequestError: str = ""
-    ConnectionError: str = ""
-    PeerFoundInDHT: dict[str, int] = field(default_factory=dict)
-    CidInDHT: bool = False
-
-    DataAvailableOverBitswap: DataAvailableOverBitswap = DataAvailableOverBitswap()
-
-    LoggingErrorBlob: str = ""
-
-
-@dataclass
-class AddFileResponse:
-    Cid: str = NULL_STR
-    EstuaryId: int = -1
-    Providers: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -147,8 +114,8 @@ class BenchResult:
     Runner: str = NULL_STR
     BenchStart: datetime = datetime.MINYEAR
     FileCID: str = NULL_STR
-    AddFileRespTime: datetime.timedelta = -1
-    AddFileTime: datetime.timedelta = -1
+    AddFileRespTime: datetime.timedelta = datetime.MAXYEAR - datetime.MINYEAR
+    AddFileTime: datetime.timedelta = datetime.MAXYEAR - datetime.MINYEAR
     AddFileErrorCode: int = 500
     AddFileErrorBody: str = ""
     LoggingErrorBlob: str = ""
@@ -157,63 +124,6 @@ class BenchResult:
     Region: str = NULL_STR
 
     FetchStats: FetchStats = FetchStats()
-    IpfsCheck: IpfsCheck = IpfsCheck()
-
-
-def getFile() -> tuple[str, bytes]:
-    return ("goodfile-%s" % secrets.token_urlsafe(4), secrets.token_bytes(1024 * 1024))
-
-
-def submitFile(fileName: str, fileData: list, host: str, ESTUARY_TOKEN: str, timeout: int) -> tuple[int, str]:
-    API_ENDPOINT = "https://%s/content/add" % host
-
-    req_headers = {"Authorization": "Bearer %s" % ESTUARY_TOKEN}
-
-    http = urllib3.PoolManager()
-
-    fields = {
-        "data": (fileName, fileData),
-    }
-    try:
-        r = http.request("POST", API_ENDPOINT, headers=req_headers, fields=fields, timeout=timeout)
-    except (urllib3.exceptions.HTTPError, urllib3.exceptions.TimeoutError) as error:
-        logging.error("Failed to post file because %s\nURL: %s", error, API_ENDPOINT)
-        return 408, {"Error": f"Failed to post file because {error}\nURL: {API_ENDPOINT}"}
-
-    resp_body = r.data.decode("utf-8")
-    resp_dict = json.loads(r.data.decode("utf-8"))
-
-    return (r.status, resp_dict)
-
-
-def ipfsChecker(cid: str, addr: str, timeout: int) -> IpfsCheck:
-    ipfsCheck = IpfsCheck()
-    startTime = time.time_ns()
-
-    http = urllib3.PoolManager()
-    url = f"https://ipfs-check-backend.ipfs.io/?cid={cid}&multiaddr={addr}"
-
-    try:
-        r = http.request("GET", url, timeout=timeout)
-    except (urllib3.exceptions.HTTPError, urllib3.exceptions.TimeoutError) as error:
-        logging.error("Failed to get IPFS check %s\nURL: %s", error, url)
-        ipfsCheck.CheckRequestError = f"Ipfs Connection failed. Error: {error}"
-        return ipfsCheck
-
-    resp_body = r.data.decode("utf-8")
-    resp_dict: dict = json.loads(r.data.decode("utf-8"))
-
-    ipfsCheck.CheckTook = time.time_ns() - startTime
-    if r.status != 200:
-        ipfsCheck.CheckRequestError = resp_dict.get("ConnectionError", "missing-ConnectionError")
-        ipfsCheck.LoggingErrorBlob = json.dumps(resp_dict)
-        return ipfsCheck
-
-    ipfsCheck.CidInDHT = resp_dict.get("CidInDHT", "missing-CidInDHT")
-    ipfsCheck.PeerFoundInDHT = resp_dict.get("PeerFoundInDHT", "missing-PeerFoundInDHT")
-    ipfsCheck.DataAvailableOverBitswap = resp_dict.get("DataAvailableOverBitswap", "missing-DataAvailableOverBitswap ")
-
-    return ipfsCheck
 
 
 def benchFetch(cid: str, timeout: int) -> FetchStats:
@@ -273,8 +183,9 @@ URLLib3Instrumentor().instrument(tracer_provider=trace.get_tracer_provider())
 
 def lambda_handler(event: dict, context):
     tracer = trace.get_tracer(__name__)
-    with tracer.start_as_current_span("estuary-external-benchest"):
+    with tracer.start_as_current_span("cid-prober"):
         benchResult = BenchResult()
+        benchResult.BenchStart = datetime.datetime.now()
         benchResult.Debugging = True
         try:
             with tracer.start_as_current_span("get-db-cursor"):
@@ -296,51 +207,13 @@ def lambda_handler(event: dict, context):
             timeout = event.get("timeout", 10)
             region = event.get("region", "")
 
-            fileName, fileData = getFile()
-
-            with tracer.start_as_current_span("submit-file"):
-                benchResult.BenchStart = datetime.datetime.now()
-                startInNanoSeconds = time.time_ns()
-                responseCode, submitFileResult = submitFile(fileName, fileData, host, ESTUARY_TOKEN, timeout)
-                benchResult.AddFileRespTime = time.time_ns() - startInNanoSeconds
-
-                # Not clear why we need the below - go takes a long to unmarshal json?
-                benchResult.AddFileTime = time.time_ns() - startInNanoSeconds
-
-            if "cid" in submitFileResult:
-                AddFileResponse.Cid = submitFileResult["cid"]
-                AddFileResponse.EstuaryId = submitFileResult["estuaryId"]
-                AddFileResponse.Providers = submitFileResult["providers"]
-            else:
-                AddFileResponse.Cid = NULL_STR
-                AddFileResponse.EstuaryId = NULL_STR
-                AddFileResponse.Providers = NULL_STR
-                benchResult.LoggingErrorBlob = json.dumps(submitFileResult)
-
-            benchResult.FileCID = AddFileResponse.Cid
+            benchResult.FileCID = event["cid"]
             benchResult.Runner = runner
-            benchResult.AddFileErrorCode = responseCode
             benchResult.Region = region
             benchResult.Shuttle = host
 
-            if responseCode != 200:
-                benchResult.AddFileErrorBody = json.dumps(submitFileResult)
-
-            if len(AddFileResponse.Providers) == 0:
-                benchResult.IpfsCheck.CheckRequestError = "No providers resulted from check"
-
-            else:
-                addr = AddFileResponse.Providers[0]
-                for potentialProvider in AddFileResponse.Providers:
-                    if "127.0.0.1" not in potentialProvider:
-                        # Excluding any provider not at localhost
-                        addr = potentialProvider
-                        break
-                with tracer.start_as_current_span("check-ipfs"):
-                    benchResult.IpfsCheck = ipfsChecker(AddFileResponse.Cid, addr, timeout)
-
             with tracer.start_as_current_span("fetch-uploaded-file"):
-                benchResult.FetchStats = benchFetch(AddFileResponse.Cid, timeout)
+                benchResult.FetchStats = benchFetch(benchResult.FileCID, timeout)
 
             # # do something with the data
             # for record in records:
@@ -363,8 +236,8 @@ def lambda_handler(event: dict, context):
 
 
 if __name__ == "__main__":
-    for i in range(3):
-        event = {"host": "shuttle-4.estuary.tech", "runner": "aronchick@localdebugging", "timeout": 10, "region": "ap-south-1"}
+    for i in range(1):
+        event = {"runner": "aronchick@localdebugging", "timeout": 10, "region": "ap-south-1", "cid": "QmducxoYHKULWXeq5wtKoeMzie2QggYphNCVwuFuou9eWE"}
         lambda_handler(event, {})
 
 # {
