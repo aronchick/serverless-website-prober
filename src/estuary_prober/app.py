@@ -21,8 +21,6 @@ import secrets
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-load_dotenv()  # take environment variables from .env.
-
 # Open telemetry/honeycomb block
 import os
 from opentelemetry import trace
@@ -46,32 +44,8 @@ from opentelemetry.trace.propagation.tracecontext import (
 from opentelemetry.propagate import set_global_textmap
 
 from grpc import ssl_channel_credentials
-from dotenv import load_dotenv
 
-load_dotenv()  # take environment variables from .env. (automatic on glitch; this is needed locally)
-
-HONEYCOMB_DATASET = "estuary-prober-dev"
-SERVICE_NAME = "estuary-prober-dev"
-
-# Set up tracing
-resource = Resource(attributes={"service_name": SERVICE_NAME})
-
-# Set up tracing
-resource = Resource(attributes={"service_name": SERVICE_NAME})
-trace.set_tracer_provider(TracerProvider(resource=resource))
-
-apikey = os.environ.get("HONEYCOMB_API_KEY")
-dataset = HONEYCOMB_DATASET
-print("Sending traces to Honeycomb with apikey <" + apikey + "> to dataset " + dataset)
-
-# Send the traces to Honeycomb
-hnyExporter = OTLPSpanExporter(
-    endpoint="api.honeycomb.io:443", insecure=False, credentials=ssl_channel_credentials(), headers=(("x-honeycomb-team", apikey), ("x-honeycomb-dataset", dataset))
-)
-trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(hnyExporter))
-trace.get_tracer_provider().add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
-
-# To see spans in the log, uncomment this:
+load_dotenv()  # take environment variables from .env.
 
 CONNECTION_TIMEOUT_IN_SECONDS = 10
 

@@ -17,12 +17,6 @@ terraform {
   required_version = "~> 1.0"
 }
 
-locals {
-  shuttles = toset( ["shuttle-4.estuary.tech", "shuttle-5.estuary.tech"] )
-
-  # QmducxoYHKULWXeq5wtKoeMzie2QggYphNCVwuFuou9eWE == NY Open Dataset
-  cids = toset(["QmducxoYHKULWXeq5wtKoeMzie2QggYphNCVwuFuou9eWE"])
-}
 
 provider "aws" {
   region = local.region_string
@@ -35,7 +29,6 @@ provider "aws" {
 
 locals {
   region_string = terraform.workspace
-  prober_function_name = "estuary_gateway_prober-${local.region_string}"
 }
 
 module "secret_manager" {
@@ -47,7 +40,7 @@ module "secret_manager" {
 
 }
 resource "aws_iam_role" "lambda_exec" {
-  name = "estuaryprober_iam_role_${local.region_string}"
+  name = "prober-iam-role-${local.region_string}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -72,8 +65,6 @@ module "lambda_prober" {
   source  = "./modules/lambda_prober"
 
   region=local.region_string
-  handler_function="estuary_prober.app.lambda_handler"
-  prober_function_name="${local.prober_function_name}"
   role_arn = aws_iam_role.lambda_exec.arn
 
   DATABASE_HOST=module.secret_manager.prober_secrets_dict.DATABASE_HOST
@@ -85,22 +76,37 @@ module "lambda_prober" {
 
 }
 
+
+
+locals {
+    shuttles_to_test_in_file = csvdecode(file("${path.module}/modules/events/estuary_prober_shuttles_to_test.csv"))
+    estuary_prober_events = [for s in local.shuttles_to_test_in_file : {"host" = "${s.shuttle}", "timeout"= 10, "prober"= "estuary_prober", "event_suffix"= "${s.event_suffix}"}]
+}
+
+locals {
+    cids_to_test_in_file = csvdecode(file("${path.module}/modules/events/cid_prober_cids_to_test.csv"))
+    cid_prober_events = [for c in local.cids_to_test_in_file : {"cid" = "${c.cid}", "timeout": 10, "prober"= "cid_prober", "event_suffix"= "${c.data_to_test}"}]
+}
+
+locals {
+    // Flatten probably unnecessary
+    event_output = flatten(concat(local.estuary_prober_events, local.cid_prober_events))
+}
 module "scheduled_prober_events" {
   source  = "./modules/scheduled_prober_events"
 
-  for_each = local.shuttles
+  for_each = {for event in local.event_output:  "${event.prober}_${local.region_string}_${event.event_suffix}" => event}
 
   region_string = local.region_string
-  handler_function = "estuary_prober.app.lambda_handler"
-  prober_function_name = module.lambda_prober.prober_function_name
+  handler_function = "muxer.app.lambda_handler"
   prober_arn = module.lambda_prober.prober_arn
+  prober_function_name = "${each.key}"
 
-  cloud_event_name = "${local.prober_function_name}-${each.key}"
+  cloud_event_name = "${each.key}"
 
-  event = tomap({
-    "host" = "${each.key}",
+  event = merge(each.value, {
     "region" = "${local.region_string}"
-    "runner" = "lambda@${local.prober_function_name}"
+    "runner" = "lambda@${each.key}"
     "timeout" = 60
   })
 

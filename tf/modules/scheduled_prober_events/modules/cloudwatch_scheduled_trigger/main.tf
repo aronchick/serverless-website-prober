@@ -1,3 +1,6 @@
+resource "random_id" "cloud_event_name" {
+  byte_length = 2
+}
 resource "aws_cloudwatch_event_rule" "every_one_minutes" {
     name = "1m-${var.prober_cloud_event_name}"
     description = "Fires every one minutes"

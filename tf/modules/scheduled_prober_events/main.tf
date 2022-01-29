@@ -1,6 +1,5 @@
 locals {
   region = var.region_string
-  unique_runner_id = "${var.region_string}-${var.prober_function_name}"
 }
 
 

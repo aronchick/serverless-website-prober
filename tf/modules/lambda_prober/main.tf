@@ -10,34 +10,34 @@ resource "aws_s3_bucket" "lambda_bucket" {
   force_destroy = true
 }
 
-data "archive_file" "lambdaproberzip" {
+data "archive_file" "proberzip" {
   type = "zip"
 
-  source_dir  = "${path.cwd}/build/lambdaprober"
-  output_path = "${path.cwd}/package/lambdaprober.zip"
+  source_dir  = "${path.cwd}/build/prober"
+  output_path = "${path.cwd}/package/prober.zip"
 }
 
 
 resource "aws_s3_bucket_object" "prober_bucket_object" {
   bucket = aws_s3_bucket.lambda_bucket.id
 
-  key    = "lambdaprober.zip"
-  source = data.archive_file.lambdaproberzip.output_path
+  key    = "prober.zip"
+  source = data.archive_file.proberzip.output_path
 
-  etag = filemd5(data.archive_file.lambdaproberzip.output_path)
+  etag = filemd5(data.archive_file.proberzip.output_path)
 }
 
 resource "aws_lambda_function" "prober" {
-  function_name = "${var.prober_function_name}"
+  function_name = "muxer_app_lambda_handler"
 
   s3_bucket = aws_s3_bucket.lambda_bucket.id
   s3_key    = aws_s3_bucket_object.prober_bucket_object.key
 
   runtime = "python3.9"
-  handler = var.handler_function
+  handler = "muxer.app.lambda_handler"
   timeout = 60
 
-  source_code_hash = data.archive_file.lambdaproberzip.output_base64sha256
+  source_code_hash = data.archive_file.proberzip.output_base64sha256
 
   role = var.role_arn
 

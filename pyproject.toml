@@ -21,6 +21,7 @@ opentelemetry-instrumentation-urllib3 = "^0.27b0"
 black = {version = "^21.12b0", allow-prereleases = true}
 tox = "^3.24.5"
 pytest = "^6.2.5"
+ipython = "^8.0.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

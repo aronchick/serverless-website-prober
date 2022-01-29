@@ -1,5 +1,5 @@
-SERVICE=lambdaprober
-BUCKETNAME=pl-lambda-probers
+SERVICE=prober
+BUCKETNAME=pl-probers
 
 build:
 	poetry export -f requirements.txt --without-hashes -o requirements.txt

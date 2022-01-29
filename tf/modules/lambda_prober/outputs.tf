@@ -21,5 +21,5 @@ output "lambda_bucket_key" {
 
 output "lambdazip_output_base64sha256" {
     description = "Sha256 for the lambda zip"
-    value = data.archive_file.lambdaproberzip.output_base64sha256
+    value = data.archive_file.proberzip.output_base64sha256
 }
