@@ -49,6 +49,7 @@ resource "aws_lambda_function" "prober" {
       DATABASE_NAME=var.DATABASE_NAME
       ESTUARY_TOKEN=var.ESTUARY_TOKEN
       HONEYCOMB_API_KEY=var.HONEYCOMB_API_KEY
+      SOURCE_CODE_HASH=data.archive_file.proberzip.output_base64sha256
     }
   }
 }

@@ -21,35 +21,13 @@ from pathlib import Path
 
 sys.path.append(Path(__file__).parent.parent.absolute().name)
 from util.http import is_url_valid
+from util.honeycomb import start_honeycomb
+from opentelemetry import trace
 
 import secrets
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-
-# Open telemetry/honeycomb block
-import os
-from opentelemetry import trace
-from opentelemetry.instrumentation.urllib3 import URLLib3Instrumentor
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import (
-    SimpleSpanProcessor,
-    BatchSpanProcessor,
-    ConsoleSpanExporter,
-)
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
-    OTLPSpanExporter,
-)
-from opentelemetry.context.context import Context
-import typing
-from opentelemetry.propagators import textmap
-from opentelemetry.trace.propagation.tracecontext import (
-    TraceContextTextMapPropagator,
-)
-from opentelemetry.propagate import set_global_textmap
-
-from grpc import ssl_channel_credentials
 
 load_dotenv()  # take environment variables from .env.
 
@@ -255,10 +233,8 @@ def benchFetch(cid: str, timeout: int) -> FetchStats:
     return fetchStats
 
 
-URLLib3Instrumentor().instrument(tracer_provider=trace.get_tracer_provider())
-
-
 def lambda_handler(event: dict, context):
+    start_honeycomb(event["prober"])
     tracer = trace.get_tracer(__name__)
     with tracer.start_as_current_span("estuary-external-benchest"):
         benchResult = BenchResult()
