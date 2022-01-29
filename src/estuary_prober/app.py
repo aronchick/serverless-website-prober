@@ -16,6 +16,12 @@ import dataclasses
 import datetime
 import time
 
+import sys
+from pathlib import Path
+
+sys.path.append(Path(__file__).parent.parent.absolute().name)
+from util.http import is_url_valid
+
 import secrets
 
 logger = logging.getLogger()
@@ -148,6 +154,9 @@ def submitFile(fileName: str, fileData: list, host: str, ESTUARY_TOKEN: str, tim
     fields = {
         "data": (fileName, fileData),
     }
+
+    is_url_valid(API_ENDPOINT, "POST")
+
     try:
         r = http.request("POST", API_ENDPOINT, headers=req_headers, fields=fields, timeout=timeout)
     except (urllib3.exceptions.HTTPError, urllib3.exceptions.TimeoutError) as error:
@@ -166,6 +175,8 @@ def ipfsChecker(cid: str, addr: str, timeout: int) -> IpfsCheck:
 
     http = urllib3.PoolManager()
     url = f"https://ipfs-check-backend.ipfs.io/?cid={cid}&multiaddr={addr}"
+
+    is_url_valid(url)
 
     try:
         r = http.request("GET", url, timeout=timeout)
@@ -196,6 +207,8 @@ def benchFetch(cid: str, timeout: int) -> FetchStats:
     fetchStats.GatewayURL = f"https://dweb.link/ipfs/{cid}"
 
     http = urllib3.PoolManager()
+
+    is_url_valid(fetchStats.GatewayURL)
 
     fetchStats.RequestStart = datetime.datetime.now()
     current_span.set_attribute("Gateway URL", fetchStats.GatewayURL)

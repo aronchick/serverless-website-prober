@@ -9,6 +9,7 @@ sys.path.append(Path(__file__).parent.parent.absolute().name)
 
 # All probers
 import estuary_prober.app as estuary_prober
+import cid_prober.app as cid_prober
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -76,9 +77,7 @@ def lambda_handler(event: dict, context):
     with tracer.start_as_current_span("global-span"):
         current_span = trace.get_current_span()
         current_span.add_event(f"Begin mux")
-        probers = {
-            "estuary_prober": estuary_prober.lambda_handler,
-        }
+        probers = {"estuary_prober": estuary_prober.lambda_handler, "cid_prober": cid_prober.lambda_handler}
 
         prober_fxn = probers.get(event.get("prober", ""), no_prober_found)
         prober_fxn(event, context)
