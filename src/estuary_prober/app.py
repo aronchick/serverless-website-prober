@@ -25,6 +25,8 @@ from util.http import is_url_valid
 from util.honeycomb import start_honeycomb
 from opentelemetry import trace
 
+tracer = trace.get_tracer(__name__)
+
 import secrets
 
 logger = logging.getLogger()
@@ -134,62 +136,73 @@ def submitFile(fileName: str, fileData: list, host: str, ESTUARY_TOKEN: str, tim
         "data": (fileName, fileData),
     }
 
-    is_url_valid(API_ENDPOINT, ESTUARY_TOKEN)
+    with tracer.start_as_current_span("checking-with-is-url-valid") as current_span:
+        is_url_valid(API_ENDPOINT, ESTUARY_TOKEN)
 
-    try:
-        r = http.request("POST", API_ENDPOINT, headers=req_headers, fields=fields, timeout=int(timeout))
-    except (urllib3.exceptions.HTTPError, urllib3.exceptions.TimeoutError) as error:
-        logging.error("Failed to post file because %s\nURL: %s", error, API_ENDPOINT)
-        return 408, {"Error": f"Failed to post file because {error}\nURL: {API_ENDPOINT}"}
+    with tracer.start_as_current_span("posting-to-API-endpoint") as current_span:
+        try:
+            current_span.set_attributes({"API_ENDPOINT": API_ENDPOINT, "timeout": timeout})
+            current_span.add_event(f"starting file post to {API_ENDPOINT}")
+            r = http.request("POST", API_ENDPOINT, headers=req_headers, fields=fields, timeout=int(timeout))
+            current_span.add_event(f"finished file post to {API_ENDPOINT} with no errors.")
+        except (urllib3.exceptions.HTTPError, urllib3.exceptions.TimeoutError) as error:
+            current_span.add_event(f"Caught error in posting.")
+            logging.error("Failed to post file because %s\nURL: %s", error, API_ENDPOINT)
+            return 408, {"Error": f"Failed to post file because {error}\nURL: {API_ENDPOINT}"}
 
-    resp_body = r.data.decode("utf-8")
-    resp_dict = json.loads(r.data.decode("utf-8"))
+        current_span.add_event("Starting processing JSON response")
 
-    return (r.status, resp_dict)
+        resp_body = r.data.decode("utf-8")
+        resp_dict = json.loads(r.data.decode("utf-8"))
+
+        current_span.add_event("Finished processing JSON response")
+
+        return (r.status, resp_dict)
 
 
 def ipfsChecker(cid: str, addr: str, timeout: int) -> IpfsCheck:
     ipfsCheck = IpfsCheck()
     startTime = time.time_ns()
 
-    current_span = trace.get_current_span()
-
     http = urllib3.PoolManager()
     url = f"https://ipfs-check-backend.ipfs.io/?cid={cid}&multiaddr={addr}"
 
     is_url_valid(url)
 
-    try:
-        r = http.request("GET", url, timeout=int(timeout))
+    with tracer.start_as_current_span("checking-ipfs") as current_span:
+        try:
+            current_span.add_event(f"Checking IPFS at url: {url}")
+            r = http.request("GET", url, timeout=int(timeout))
+            current_span.add_event(f"Finished checking IPFS with no errors.")
 
-        resp_body = r.data.decode("utf-8")
-        resp_dict: dict = json.loads(r.data.decode("utf-8"))
-    except (urllib3.exceptions.HTTPError, urllib3.exceptions.TimeoutError) as error:
-        message = f"Failed to get IPFS check {error}\nURL: {url}"
-        ipfsCheck.CheckRequestError = message
-        current_span.add_event(message)
+            resp_body = r.data.decode("utf-8")
+            resp_dict: dict = json.loads(r.data.decode("utf-8"))
+        except (urllib3.exceptions.HTTPError, urllib3.exceptions.TimeoutError) as error:
+            message = f"Failed to get IPFS check {error}\nURL: {url}"
+            ipfsCheck.CheckRequestError = message
+            current_span.add_event(message)
+            return ipfsCheck
+        except (json.decoder.JSONDecodeError) as error:
+            message = f"No response from request data, so could not decode JSON.: {error} \n response: {r}"
+            ipfsCheck.CheckRequestError = message
+            current_span.add_event(message)
+            return ipfsCheck
+
+        ipfsCheck.CheckTook = time.time_ns() - startTime
+        if r.status != 200:
+            current_span.add_event(f"Status code for IPFS check not 200: {resp_dict}")
+            ipfsCheck.CheckRequestError = resp_dict.get("ConnectionError", "missing-ConnectionError")
+            ipfsCheck.LoggingErrorBlob = resp_dict
+            return ipfsCheck
+
+        ipfsCheck.CidInDHT = resp_dict.get("CidInDHT", "missing-CidInDHT")
+        ipfsCheck.PeerFoundInDHT = resp_dict.get("PeerFoundInDHT", "missing-PeerFoundInDHT")
+        ipfsCheck.DataAvailableOverBitswap = resp_dict.get("DataAvailableOverBitswap", "missing-DataAvailableOverBitswap ")
+
         return ipfsCheck
-    except (json.decoder.JSONDecodeError) as error:
-        message = f"No response from request data, so could not decode JSON.: {error} \n response: {r}"
-        ipfsCheck.CheckRequestError = message
-        current_span.add_event(message)
-        return ipfsCheck
-
-    ipfsCheck.CheckTook = time.time_ns() - startTime
-    if r.status != 200:
-        ipfsCheck.CheckRequestError = resp_dict.get("ConnectionError", "missing-ConnectionError")
-        ipfsCheck.LoggingErrorBlob = json.dumps(resp_dict)
-        return ipfsCheck
-
-    ipfsCheck.CidInDHT = resp_dict.get("CidInDHT", "missing-CidInDHT")
-    ipfsCheck.PeerFoundInDHT = resp_dict.get("PeerFoundInDHT", "missing-PeerFoundInDHT")
-    ipfsCheck.DataAvailableOverBitswap = resp_dict.get("DataAvailableOverBitswap", "missing-DataAvailableOverBitswap ")
-
-    return ipfsCheck
 
 
 def benchFetch(cid: str, timeout: int) -> FetchStats:
-    current_span = trace.get_current_span()
     fetchStats = FetchStats()
     fetchStats.GatewayURL = f"https://dweb.link/ipfs/{cid}"
 
@@ -197,53 +210,54 @@ def benchFetch(cid: str, timeout: int) -> FetchStats:
 
     is_url_valid(fetchStats.GatewayURL)
 
-    fetchStats.RequestStart = datetime.datetime.now()
-    current_span.set_attribute("Gateway URL", fetchStats.GatewayURL)
-    startTimeInNS = time.time_ns()
-    current_span.add_event(f"Begin file GET: {fetchStats.GatewayURL}")
-    try:
-        r = http.request("GET", fetchStats.GatewayURL, preload_content=False, timeout=int(timeout))
-        current_span.add_event(f"http.request returned")
-    except (urllib3.exceptions.HTTPError, urllib3.exceptions.TimeoutError, urllib3.exceptions.MaxRetryError, urllib3.exceptions.ReadTimeoutError) as error:
-        current_span.add_event(f"http.request to {fetchStats.GatewayURL} failed: {error}")
-        logging.error("Failed to get file %s\nURL: %s", error, fetchStats.GatewayURL)
-        fetchStats.StatusCode = 408
-        fetchStats.RequestError = str(error)
+    with tracer.start_as_current_span("fetch-uploaded-file") as current_span:
+        fetchStats.RequestStart = datetime.datetime.now()
+        current_span.set_attribute("Gateway URL", fetchStats.GatewayURL)
+        startTimeInNS = time.time_ns()
+        current_span.add_event(f"Begin file GET: {fetchStats.GatewayURL}")
+        try:
+            current_span.add_event(f"starting http.request at: {fetchStats.GatewayURL}")
+            r = http.request("GET", fetchStats.GatewayURL, preload_content=False, timeout=int(timeout))
+            current_span.add_event(f"http.request returned")
+        except (urllib3.exceptions.HTTPError, urllib3.exceptions.TimeoutError, urllib3.exceptions.MaxRetryError, urllib3.exceptions.ReadTimeoutError) as error:
+            current_span.add_event(f"http.request to {fetchStats.GatewayURL} failed: {error}")
+            logging.error("Failed to get file %s\nURL: %s", error, fetchStats.GatewayURL)
+            fetchStats.StatusCode = 408
+            fetchStats.RequestError = str(error)
+            return fetchStats
+
+        fetchStats.StatusCode = r.status
+
+        if r.status != 200:
+            current_span.add_event(f"Status Code != 200: {r}")
+            fetchStats.RequestError = r.headers.get("ConnectionError", "missing-connectionerrror")
+            fetchStats.LoggingErrorBlob = str(r)
+
+        fetchStats.ResponseTime = time.time_ns() - startTimeInNS
+
+        fetchStats.GatewayHost = r.headers.get("x-ipfs-gateway-host", "missing-x-ipfs-gateway-host")
+        xpop = r.headers.get("x-ipfs-pop", "missing-x-ipfs-pop")
+        if len(fetchStats.GatewayHost) == 0:
+            fetchStats.GatewayHost = xpop
+
+        current_span.add_event(f"Begin stream 1 byte")
+        r.stream(1)
+        current_span.add_event(f"End stream 1 byte")
+
+        fetchStats.TimeToFirstByte = time.time_ns() - startTimeInNS
+
+        current_span.add_event(f"Begin stream entire file")
+        for chunk in r.stream(32):
+            _ = chunk
+        current_span.add_event(f"End stream entire file")
+
+        fetchStats.TotalTransferTime = time.time_ns() - startTimeInNS
+        fetchStats.TotalElapsed = time.time_ns() - startTimeInNS
+
         return fetchStats
-
-    fetchStats.StatusCode = r.status
-
-    if r.status != 200:
-        current_span.add_event(f"Status Code != 200: {r}")
-        fetchStats.RequestError = r.headers.get("ConnectionError", "missing-connectionerrror")
-        fetchStats.LoggingErrorBlob = str(r)
-
-    fetchStats.ResponseTime = time.time_ns() - startTimeInNS
-
-    fetchStats.GatewayHost = r.headers.get("x-ipfs-gateway-host", "missing-x-ipfs-gateway-host")
-    xpop = r.headers.get("x-ipfs-pop", "missing-x-ipfs-pop")
-    if len(fetchStats.GatewayHost) == 0:
-        fetchStats.GatewayHost = xpop
-
-    current_span.add_event(f"Begin stream 1 byte")
-    r.stream(1)
-    current_span.add_event(f"End stream 1 byte")
-
-    fetchStats.TimeToFirstByte = time.time_ns() - startTimeInNS
-
-    current_span.add_event(f"Begin stream entire file")
-    for chunk in r.stream(32):
-        _ = chunk
-    current_span.add_event(f"End stream entire file")
-
-    fetchStats.TotalTransferTime = time.time_ns() - startTimeInNS
-    fetchStats.TotalElapsed = time.time_ns() - startTimeInNS
-
-    return fetchStats
 
 
 def lambda_handler(event: dict, context):
-    tracer = trace.get_tracer(__name__)
     with tracer.start_as_current_span("estuary-external-benchest"):
         benchResult = BenchResult()
         benchResult.Debugging = True
@@ -317,8 +331,9 @@ def lambda_handler(event: dict, context):
 
 
 if __name__ == "__main__":
-    for i in range(3):
-        event = {"host": "shuttle-4.estuary.tech", "runner": "aronchick@localdebugging", "timeout": 10, "region": "ap-south-1"}
+    for i in range(1):
+        event = {"host": "shuttle-5.estuary.tech", "runner": "aronchick@localdebugging", "timeout": 10, "region": "ap-south-1", "prober": "estuary_prober"}
+        start_honeycomb(event["prober"] + "_manual")
         lambda_handler(event, {})
 
 # {

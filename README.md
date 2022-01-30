@@ -75,6 +75,8 @@ To deploy, there are three steps:
 1. Execute `make zip` which creates a single zip package and puts it into `tf/package/prober.zip`
 1. Execute `cd tf && terraform apply -auto-approve` which deploys the currently selected terraform workspace.
 
+You can automatically execute all these at once with `make all`.
+
 The architecture deploys:
 
 * An s3 bucket with the zip included

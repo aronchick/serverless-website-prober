@@ -19,6 +19,8 @@ import os
 from util.honeycomb import start_honeycomb
 from opentelemetry import trace
 
+tracer = trace.get_tracer(__name__)
+
 from dotenv import load_dotenv
 
 load_dotenv()  # take environment variables from .env. (automatic on glitch; this is needed locally)
@@ -33,9 +35,7 @@ def no_prober_found(event: dict, context):
 
 def lambda_handler(event: dict, context):
     start_honeycomb(event["prober"])
-    tracer = trace.get_tracer(__name__)
-    with tracer.start_as_current_span("global-span"):
-        current_span = trace.get_current_span()
+    with tracer.start_as_current_span("muxer-global-span") as current_span:
         current_span.set_attribute("source code hash", os.environ.get("SOURCE_CODE_HASH", "NO_SOURCE_CODE_HASH"))
         current_span.add_event(f"Begin mux")
         probers = {"estuary_prober": estuary_prober.lambda_handler, "cid_prober": cid_prober.lambda_handler}
@@ -49,15 +49,15 @@ def lambda_handler(event: dict, context):
 if __name__ == "__main__":
     for i in range(1):
         temp_data_set = "estuary_prober_manual"
-        # event = {"host": "shuttle-5.estuary.tech", "runner": "aronchick@localdebugging", "timeout": 10, "region": "ap-south-1", "prober": "estuary_prober"}
+        event = {"host": "shuttle-5.estuary.tech", "runner": "aronchick@localdebugging", "timeout": 10, "region": "ap-south-1", "prober": "estuary_prober"}
 
-        event = {
-            "runner": "aronchick@localdebugging",
-            "timeout": 10,
-            "region": "ap-south-1",
-            "cid": "QmducxoYHKULWXeq5wtKoeMzie2QggYphNCVwuFuou9eWE",
-            "prober": "cid_prober",
-        }
+        # event = {
+        #     "runner": "aronchick@localdebugging",
+        #     "timeout": 10,
+        #     "region": "ap-south-1",
+        #     "cid": "QmducxoYHKULWXeq5wtKoeMzie2QggYphNCVwuFuou9eWE",
+        #     "prober": "cid_prober",
+        # }
 
         lambda_handler(event, {})
 

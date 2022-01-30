@@ -26,6 +26,8 @@ from util.bench import FetchStats, benchFetch
 from util.honeycomb import start_honeycomb
 from opentelemetry import trace
 
+tracer = trace.get_tracer(__name__)
+
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
@@ -52,7 +54,6 @@ class EnhancedJSONEncoder(json.JSONEncoder):
 
 
 def lambda_handler(event: dict, context):
-    tracer = trace.get_tracer(__name__)
     with tracer.start_as_current_span("estuary-external-file-test") as external_file_test_span:
         try:
             if not ESTUARY_TOKEN:
