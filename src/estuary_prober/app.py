@@ -248,17 +248,6 @@ def lambda_handler(event: dict, context):
         benchResult = BenchResult()
         benchResult.Debugging = True
         try:
-            with tracer.start_as_current_span("get-db-cursor"):
-                conn = connect(
-                    user=DATABASE_USER,
-                    password=DATABASE_PASSWORD,
-                    host=DATABASE_HOST,
-                    port=5432,
-                    dbname=DATABASE_NAME,  # Drop forward slash
-                    connect_timeout=CONNECTION_TIMEOUT_IN_SECONDS,
-                )
-                cursor = conn.cursor()
-
             if not ESTUARY_TOKEN:
                 raise ValueError("no estuary token found")
 
@@ -323,12 +312,6 @@ def lambda_handler(event: dict, context):
 
         full_bench_result = json.dumps(benchResult, cls=EnhancedJSONEncoder)
         print(full_bench_result)
-
-        with tracer.start_as_current_span("submit-results-to-db"):
-            cursor.execute("insert into db_bench_results(result) values(%s)", (full_bench_result,))
-            conn.commit()  # <- We MUST commit to reflect the inserted data
-            cursor.close()
-            conn.close()
 
         return {"statusCode": HTTPStatus.OK.value}
 

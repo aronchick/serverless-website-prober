@@ -53,29 +53,22 @@ class EnhancedJSONEncoder(json.JSONEncoder):
 
 def lambda_handler(event: dict, context):
     tracer = trace.get_tracer(__name__)
-    with tracer.start_as_current_span("estuary-external-benchest"):
+    with tracer.start_as_current_span("estuary-external-file-test") as external_file_test_span:
         try:
-            with tracer.start_as_current_span("get-db-cursor"):
-                conn = connect(
-                    user=DATABASE_USER,
-                    password=DATABASE_PASSWORD,
-                    host=DATABASE_HOST,
-                    port=5432,
-                    dbname=DATABASE_NAME,  # Drop forward slash
-                    connect_timeout=CONNECTION_TIMEOUT_IN_SECONDS,
-                )
-                cursor = conn.cursor()
-
             if not ESTUARY_TOKEN:
                 raise ValueError("no estuary token found")
 
-            host = event.get("host", "api.estuary.tech")
             runner = event.get("runner", "")
             timeout = event.get("timeout", 10)
             region = event.get("region", "")
 
-            with tracer.start_as_current_span("fetch-uploaded-file"):
-                fetchStats = benchFetch(cid=event["cid"], timeout=event["timeout"])
+            with tracer.start_as_current_span("fetch-specified-file") as fetch_file_span:
+                fetch_file_span.add_event("Starting bench fetch.")
+                fetch_file_span.set_attribute("CID", event["cid"])
+                fetch_file_span.set_attribute("Timeout", event["timeout"])
+
+                fetchStats = benchFetch(cid=event["cid"], timeout=event["timeout"], stream_full_file=False)
+                fetch_file_span.add_event("Ending bench fetch.")
 
         except Exception as e:  # Catch all for easier error tracing in logs
             logger.error(e, exc_info=True)
@@ -84,19 +77,13 @@ def lambda_handler(event: dict, context):
         full_bench_result = json.dumps(fetchStats, cls=EnhancedJSONEncoder)
         print(full_bench_result)
 
-        with tracer.start_as_current_span("submit-results-to-db"):
-            cursor.execute("insert into db_bench_results(result) values(%s)", (full_bench_result,))
-            conn.commit()  # <- We MUST commit to reflect the inserted data
-            cursor.close()
-            conn.close()
-
         return {"statusCode": HTTPStatus.OK.value}
 
 
 if __name__ == "__main__":
     for i in range(1):
-        event = {"runner": "aronchick@localdebugging", "timeout": 10, "region": "ap-south-1", "cid": "QmducxoYHKULWXeq5wtKoeMzie2QggYphNCVwuFuou9eWE", "prober": "cid_prober_dev"}
-        start_honeycomb(event["prober"])
+        event = {"runner": "aronchick@localdebugging", "timeout": 10, "region": "ap-south-1", "cid": "QmducxoYHKULWXeq5wtKoeMzie2QggYphNCVwuFuou9eWE", "prober": "cid_prober"}
+        start_honeycomb("cid_prober_manual")
 
         lambda_handler(event, {})
 

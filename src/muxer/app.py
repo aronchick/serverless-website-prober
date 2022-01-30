@@ -32,6 +32,7 @@ def no_prober_found(event: dict, context):
 
 
 def lambda_handler(event: dict, context):
+    start_honeycomb(event["prober"])
     tracer = trace.get_tracer(__name__)
     with tracer.start_as_current_span("global-span"):
         current_span = trace.get_current_span()
@@ -58,7 +59,6 @@ if __name__ == "__main__":
             "prober": "cid_prober",
         }
 
-        start_honeycomb(event["prober"] + "_manual")
         lambda_handler(event, {})
 
 

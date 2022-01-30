@@ -1,6 +1,10 @@
 SERVICE=prober
 BUCKETNAME=pl-probers
 
+all: build zip
+	./bulk-deploy.sh
+
+
 build:
 	poetry export -f requirements.txt --without-hashes -o requirements.txt
 	sam build -m requirements.txt --use-container --build-dir tf/build

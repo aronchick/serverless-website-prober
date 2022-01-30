@@ -45,7 +45,7 @@ class FetchStats:
     LoggingErrorBlob: str = ""
 
 
-def benchFetch(cid: str, timeout: int) -> FetchStats:
+def benchFetch(cid: str, timeout: int, stream_full_file: bool = True) -> FetchStats:
     current_span = trace.get_current_span()
     fetchStats = FetchStats()
     fetchStats.GatewayURL = f"https://dweb.link/ipfs/{cid}"
@@ -88,10 +88,11 @@ def benchFetch(cid: str, timeout: int) -> FetchStats:
 
     fetchStats.TimeToFirstByte = time.time_ns() - startTimeInNS
 
-    current_span.add_event(f"Begin stream entire file")
-    for chunk in r.stream(32):
-        _ = chunk
-    current_span.add_event(f"End stream entire file")
+    if stream_full_file:
+        current_span.add_event(f"Begin stream entire file")
+        for chunk in r.stream(32):
+            _ = chunk
+        current_span.add_event(f"End stream entire file")
 
     fetchStats.TotalTransferTime = time.time_ns() - startTimeInNS
     fetchStats.TotalElapsed = time.time_ns() - startTimeInNS

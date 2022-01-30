@@ -5,6 +5,6 @@ terraform {
     encrypt              = true
     key                  = "terraform.tfstate"
     region               = "ap-south-1"
-    workspace_key_prefix = "estuary-prober"
+    workspace_key_prefix = "prober"
   }
 }
