@@ -7,14 +7,14 @@ def is_url_valid(url: str, ESTUARY_TOKEN: str = "") -> bool:
     with tracer.start_as_current_span("test-url-is-valid-and-resolves"):
         current_span = trace.get_current_span()
 
-        current_span.set_attribute("url", url)
-
         req_headers = {}
         if len(ESTUARY_TOKEN) > 0:
             req_headers["Authorization"] = f"Bearer {ESTUARY_TOKEN}"
 
         try:
             current_span.add_event(f"Resolving: {url}")
+            current_span.set_attribute("url", url)
+
             request_response = requests.head(url, headers=req_headers)
             current_span.add_event(f"Completed resolving with no errors: {url}")
 

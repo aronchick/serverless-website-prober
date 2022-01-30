@@ -82,7 +82,13 @@ def lambda_handler(event: dict, context):
 
 if __name__ == "__main__":
     for i in range(1):
-        event = {"runner": "aronchick@localdebugging", "timeout": 10, "region": "ap-south-1", "cid": "QmducxoYHKULWXeq5wtKoeMzie2QggYphNCVwuFuou9eWE", "prober": "cid_prober"}
+        event = {
+            "runner": "aronchick@localdebugging",  # Name of the runner (for debugging)
+            "timeout": 10,  # Length of time before http timeout
+            "region": "ap-south-1",  # Region from which this is being called (for debugging)
+            "cid": "QmducxoYHKULWXeq5wtKoeMzie2QggYphNCVwuFuou9eWE",  # CID to query
+            "prober": "cid_prober",  # Name of the prober (currently must be estuary_prober or cid_prober)
+        }
         start_honeycomb("cid_prober_manual")
 
         lambda_handler(event, {})
