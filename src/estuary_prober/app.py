@@ -1,4 +1,5 @@
 from curses.ascii import NUL
+from email import message
 from importlib.metadata import files
 import logging
 import os
@@ -133,10 +134,10 @@ def submitFile(fileName: str, fileData: list, host: str, ESTUARY_TOKEN: str, tim
         "data": (fileName, fileData),
     }
 
-    is_url_valid(API_ENDPOINT, "POST")
+    is_url_valid(API_ENDPOINT, ESTUARY_TOKEN)
 
     try:
-        r = http.request("POST", API_ENDPOINT, headers=req_headers, fields=fields, timeout=timeout)
+        r = http.request("POST", API_ENDPOINT, headers=req_headers, fields=fields, timeout=int(timeout))
     except (urllib3.exceptions.HTTPError, urllib3.exceptions.TimeoutError) as error:
         logging.error("Failed to post file because %s\nURL: %s", error, API_ENDPOINT)
         return 408, {"Error": f"Failed to post file because {error}\nURL: {API_ENDPOINT}"}
@@ -151,20 +152,28 @@ def ipfsChecker(cid: str, addr: str, timeout: int) -> IpfsCheck:
     ipfsCheck = IpfsCheck()
     startTime = time.time_ns()
 
+    current_span = trace.get_current_span()
+
     http = urllib3.PoolManager()
     url = f"https://ipfs-check-backend.ipfs.io/?cid={cid}&multiaddr={addr}"
 
     is_url_valid(url)
 
     try:
-        r = http.request("GET", url, timeout=timeout)
-    except (urllib3.exceptions.HTTPError, urllib3.exceptions.TimeoutError) as error:
-        logging.error("Failed to get IPFS check %s\nURL: %s", error, url)
-        ipfsCheck.CheckRequestError = f"Ipfs Connection failed. Error: {error}"
-        return ipfsCheck
+        r = http.request("GET", url, timeout=int(timeout))
 
-    resp_body = r.data.decode("utf-8")
-    resp_dict: dict = json.loads(r.data.decode("utf-8"))
+        resp_body = r.data.decode("utf-8")
+        resp_dict: dict = json.loads(r.data.decode("utf-8"))
+    except (urllib3.exceptions.HTTPError, urllib3.exceptions.TimeoutError) as error:
+        message = f"Failed to get IPFS check {error}\nURL: {url}"
+        ipfsCheck.CheckRequestError = message
+        current_span.add_event(message)
+        return ipfsCheck
+    except (json.decoder.JSONDecodeError) as error:
+        message = f"No response from request data, so could not decode JSON.: {error} \n response: {r}"
+        ipfsCheck.CheckRequestError = message
+        current_span.add_event(message)
+        return ipfsCheck
 
     ipfsCheck.CheckTook = time.time_ns() - startTime
     if r.status != 200:
@@ -193,7 +202,7 @@ def benchFetch(cid: str, timeout: int) -> FetchStats:
     startTimeInNS = time.time_ns()
     current_span.add_event(f"Begin file GET: {fetchStats.GatewayURL}")
     try:
-        r = http.request("GET", fetchStats.GatewayURL, preload_content=False, timeout=timeout)
+        r = http.request("GET", fetchStats.GatewayURL, preload_content=False, timeout=int(timeout))
         current_span.add_event(f"http.request returned")
     except (urllib3.exceptions.HTTPError, urllib3.exceptions.TimeoutError, urllib3.exceptions.MaxRetryError, urllib3.exceptions.ReadTimeoutError) as error:
         current_span.add_event(f"http.request to {fetchStats.GatewayURL} failed: {error}")
@@ -205,9 +214,9 @@ def benchFetch(cid: str, timeout: int) -> FetchStats:
     fetchStats.StatusCode = r.status
 
     if r.status != 200:
-        current_span.add_event(f"Status Code != 200: {json.dumps(r)}")
+        current_span.add_event(f"Status Code != 200: {r}")
         fetchStats.RequestError = r.headers.get("ConnectionError", "missing-connectionerrror")
-        fetchStats.LoggingErrorBlob = json.dumps(r)
+        fetchStats.LoggingErrorBlob = str(r)
 
     fetchStats.ResponseTime = time.time_ns() - startTimeInNS
 
@@ -234,7 +243,6 @@ def benchFetch(cid: str, timeout: int) -> FetchStats:
 
 
 def lambda_handler(event: dict, context):
-    start_honeycomb(event["prober"])
     tracer = trace.get_tracer(__name__)
     with tracer.start_as_current_span("estuary-external-benchest"):
         benchResult = BenchResult()

@@ -1,28 +1,27 @@
-import urllib3
-import urllib3.exceptions
+from urllib import request
+import requests
 from opentelemetry import trace
 
 
-def is_url_valid(url: str, method: str = "GET") -> bool:
+def is_url_valid(url: str, ESTUARY_TOKEN: str = "") -> bool:
     tracer = trace.get_tracer(__name__)
     with tracer.start_as_current_span("test-url-is-valid-and-resolves"):
-        http = urllib3.PoolManager()
         current_span = trace.get_current_span()
 
         current_span.set_attribute("url", url)
-        current_span.set_attribute("method", method)
+
+        req_headers = {}
+        if len(ESTUARY_TOKEN) > 0:
+            req_headers["Authorization"] = f"Bearer {ESTUARY_TOKEN}"
 
         try:
-            current_span.add_event(f"Resolving {url} via {method}")
-            request_response = http.urlopen(method, url)
+            current_span.add_event(f"Resolving {url}")
+            request_response = requests.head(url, headers=req_headers)
 
-            return request_response.status == 200
-        except urllib3.exceptions.ConnectionError as e:
-            current_span.add_event(f"Connection error resolving {url} via {method}: {e}")
+            return request_response.status_code in [200, 404]  # both 200 and 404 are acceptable (the url is valid)
+        except requests.ConnectionError as e:
+            current_span.add_event(f"Connection error resolving {url}: {e}")
             raise e
-        except urllib3.exceptions.MaxRetryError as e:
-            current_span.add_event(f"MaxRetryError error resolving {url} via {method}: {e}")
-            raise e
-        except urllib3.exceptions.TimeoutError as e:
-            current_span.add_event(f"Timeout error resolving {url} via {method}: {e}")
+        except (requests.ReadTimeout, requests.Timeout) as e:
+            current_span.add_event(f"Timeout error resolving {url}: {e}")
             raise e

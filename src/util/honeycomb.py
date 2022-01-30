@@ -2,6 +2,7 @@
 import os
 from opentelemetry import trace
 from opentelemetry.instrumentation.urllib3 import URLLib3Instrumentor
+from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import (
@@ -29,6 +30,7 @@ def start_honeycomb(dataset_name):
     SERVICE_NAME = dataset_name
 
     URLLib3Instrumentor().instrument(tracer_provider=trace.get_tracer_provider())
+    RequestsInstrumentor().instrument(tracer_provider=trace.get_tracer_provider())
 
     # Set up tracing
     resource = Resource(attributes={"service_name": SERVICE_NAME})

@@ -59,7 +59,7 @@ def benchFetch(cid: str, timeout: int) -> FetchStats:
     startTimeInNS = time.time_ns()
     current_span.add_event(f"Begin file GET: {fetchStats.GatewayURL}")
     try:
-        r = http.request("GET", fetchStats.GatewayURL, preload_content=False, timeout=timeout)
+        r = http.request("GET", fetchStats.GatewayURL, preload_content=False, timeout=int(timeout))
         current_span.add_event(f"http.request returned")
     except (urllib3.exceptions.HTTPError, urllib3.exceptions.TimeoutError, urllib3.exceptions.MaxRetryError, urllib3.exceptions.ReadTimeoutError) as error:
         current_span.add_event(f"http.request to {fetchStats.GatewayURL} failed: {error}")

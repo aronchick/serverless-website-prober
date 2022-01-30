@@ -47,13 +47,9 @@ def lambda_handler(event: dict, context):
 
 if __name__ == "__main__":
     for i in range(1):
-        # temp_data_set = "estuary_prober_manual"
-        # event = {"host": "shuttle-4.estuary.tech", "runner": "aronchick@localdebugging", "timeout": 10, "region": "ap-south-1", "prober": "estuary_prober"}
-        # os.environ["HONEYCOMB_DATASET"] = temp_data_set
-        # os.environ["SERVICE_NAME"] = temp_data_set
-        # lambda_handler(event, {})
+        temp_data_set = "estuary_prober_manual"
+        # event = {"host": "shuttle-5.estuary.tech", "runner": "aronchick@localdebugging", "timeout": 10, "region": "ap-south-1", "prober": "estuary_prober"}
 
-        temp_data_set = "cid_prober_manual"
         event = {
             "runner": "aronchick@localdebugging",
             "timeout": 10,
@@ -61,7 +57,8 @@ if __name__ == "__main__":
             "cid": "QmducxoYHKULWXeq5wtKoeMzie2QggYphNCVwuFuou9eWE",
             "prober": "cid_prober",
         }
-        start_honeycomb(event["prober"])
+
+        start_honeycomb(event["prober"] + "_manual")
         lambda_handler(event, {})
 
 
