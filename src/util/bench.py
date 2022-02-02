@@ -63,7 +63,6 @@ def benchFetch(cid: str, timeout: int, stream_full_file: bool = True) -> FetchSt
         current_span.add_event(f"Begin file GET: {fetchStats.GatewayURL}")
         try:
             r = http.request("GET", fetchStats.GatewayURL, preload_content=False, timeout=int(timeout))
-            current_span.add_event(f"http.request returned")
         except (urllib3.exceptions.HTTPError, urllib3.exceptions.TimeoutError, urllib3.exceptions.MaxRetryError, urllib3.exceptions.ReadTimeoutError) as error:
             current_span.add_event(f"http.request to {fetchStats.GatewayURL} failed: {error}")
             logging.error("Failed to get file %s\nURL: %s", error, fetchStats.GatewayURL)
@@ -85,17 +84,15 @@ def benchFetch(cid: str, timeout: int, stream_full_file: bool = True) -> FetchSt
         if len(fetchStats.GatewayHost) == 0:
             fetchStats.GatewayHost = xpop
 
-        current_span.add_event(f"Begin stream 1 byte")
-        r.stream(1)
-        current_span.add_event(f"End stream 1 byte")
+        with tracer.start_as_current_span("streaming 1 byte") as current_span:
+            r.stream(1)
 
         fetchStats.TimeToFirstByte = time.time_ns() - startTimeInNS
 
         if stream_full_file:
-            current_span.add_event(f"Begin stream entire file")
-            for chunk in r.stream(32):
-                _ = chunk
-            current_span.add_event(f"End stream entire file")
+            with tracer.start_as_current_span("streaming entire file") as current_span:
+                for chunk in r.stream(32):
+                    _ = chunk
 
         fetchStats.TotalTransferTime = time.time_ns() - startTimeInNS
         fetchStats.TotalElapsed = time.time_ns() - startTimeInNS

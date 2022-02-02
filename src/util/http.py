@@ -12,11 +12,8 @@ def is_url_valid(url: str, ESTUARY_TOKEN: str = "") -> bool:
             req_headers["Authorization"] = f"Bearer {ESTUARY_TOKEN}"
 
         try:
-            current_span.add_event(f"Resolving: {url}")
             current_span.set_attribute("url", url)
-
             request_response = requests.head(url, headers=req_headers)
-            current_span.add_event(f"Completed resolving with no errors: {url}")
 
             return request_response.status_code in [200, 404]  # both 200 and 404 are acceptable (the url is valid)
         except requests.ConnectionError as e:

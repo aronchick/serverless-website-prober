@@ -37,13 +37,10 @@ def lambda_handler(event: dict, context):
     start_honeycomb(event["prober"])
     with tracer.start_as_current_span("muxer-global-span") as current_span:
         current_span.set_attribute("source code hash", os.environ.get("SOURCE_CODE_HASH", "NO_SOURCE_CODE_HASH"))
-        current_span.add_event(f"Begin mux")
         probers = {"estuary_prober": estuary_prober.lambda_handler, "cid_prober": cid_prober.lambda_handler}
 
         prober_fxn = probers.get(event.get("prober", ""), no_prober_found)
         prober_fxn(event, context)
-
-        current_span.add_event(f"End mux")
 
 
 if __name__ == "__main__":

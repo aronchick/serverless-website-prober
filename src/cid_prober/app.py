@@ -64,12 +64,10 @@ def lambda_handler(event: dict, context):
             region = event.get("region", "")
 
             with tracer.start_as_current_span("fetch-specified-file") as fetch_file_span:
-                fetch_file_span.add_event("Starting bench fetch.")
                 fetch_file_span.set_attribute("CID", event["cid"])
                 fetch_file_span.set_attribute("Timeout", event["timeout"])
 
                 fetchStats = benchFetch(cid=event["cid"], timeout=event["timeout"], stream_full_file=False)
-                fetch_file_span.add_event("Ending bench fetch.")
 
         except Exception as e:  # Catch all for easier error tracing in logs
             logger.error(e, exc_info=True)
